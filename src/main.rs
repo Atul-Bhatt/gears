@@ -26,6 +26,12 @@ fn main() {
     // render loop
     while !window.should_close() {
         process_events(&mut window, &events);
+        
+        unsafe {
+            gl::ClearColor(0.2, 0.3, 0.3, 0.1);
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+        }
+
         window.swap_buffers();
         glfw.poll_events();
     }
