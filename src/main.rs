@@ -1,3 +1,4 @@
+#![allow(non_upper_case_globals)]
 use glfw::{Action, Context, Key};
 use gl::types::*;
 
@@ -16,8 +17,7 @@ const vertexShaderSource: &str = r#"
     layout (location = 0) in vec3 aPos;
     void main() {
        gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
-    }
-"#;
+    } "#;
 
 const fragmentShaderSource: &str = r#"
     #version 330 core
@@ -95,15 +95,22 @@ fn main() {
         // set up vertex data (and buffer(s)) and configure vertex attributes
         // ------------------------------------------------------------------
         // HINT: type annotation is crucial since default for float literals is f64
-        let vertices: [f32; 12] = [
-             0.5,  0.5, 0.0,  // top right
-             0.5, -0.5, 0.0,  // bottom right
-            -0.5, -0.5, 0.0,  // bottom left
-            -0.5,  0.5, 0.0   // top left
+        let vertices: [f32; 24] = [
+             -0.5,  0.5, 0.0,  // first top left
+             0.5, 0.5, 0.0,  // first top right
+             -0.5, 0.2, 0.0,  // first bottom left
+             0.5,  0.2, 0.0,   // first bottom right
+            
+             -0.5,  -0.2, 0.0,  // second top left
+             0.5, -0.2, 0.0,  // second top right
+             -0.5, -0.5, 0.0,  // second bottom left
+             0.5,  -0.5, 0.0   // second bottom right
         ];
         let indices = [ // note that we start from 0!
-            0, 1, 3,  // first Triangle
-            1, 2, 3   // second Triangle
+            0, 1, 3, // first Triangle
+            0, 2, 3,   // second Triangle
+            4, 5, 7, // third Triangle
+            4, 6, 7,   // fourth Triangle
         ];
         let (mut VBO, mut VAO, mut EBO) = (0, 0, 0);
         gl::GenVertexArrays(1, &mut VAO);
@@ -135,7 +142,7 @@ fn main() {
         gl::BindVertexArray(0);
 
         // uncomment this call to draw in wireframe polygons.
-        // gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+        //gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
 
         (shaderProgram, VAO)
     };
@@ -152,7 +159,7 @@ fn main() {
             gl::UseProgram(shaderProgram);
             gl::BindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
             //gl::DrawArrays(gl::TRIANGLES, 0, 3);
-            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
+            gl::DrawElements(gl::TRIANGLES, 12, gl::UNSIGNED_INT, ptr::null());
         }
 
         window.swap_buffers();
