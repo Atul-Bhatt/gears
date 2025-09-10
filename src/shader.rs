@@ -1,4 +1,4 @@
-#![allow(non_snake_case)]
+#![allow(non_snake_case, warnings)]
 use std::ffi::{CString, CStr};
 use std::fs::File;
 use std::io::Read;
