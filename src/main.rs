@@ -6,9 +6,19 @@ use std::sync::mpsc::Receiver;
 use std::ptr;
 use std::mem;
 use std::os::raw::c_void;
+use std::path::Path;
+use std::ffi::CStr;
+
+mod macros;
 
 mod shader;
 use shader::Shader;
+
+use image;
+use image::GenericImage;
+
+use cgmath::{Matrix4, vec3, Rad};
+use cgmath::prelude::*;
 
 const SCR_WIDTH: u32 = 800;
 const SCR_HEIGHT: u32 = 600;
@@ -33,7 +43,7 @@ fn main() {
     // load function pointers
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
 
-    let (shaderProgram, VAO) = unsafe {
+    let (shaderProgram, VBO, VAO, EB0, texture1, texture2) = unsafe {
         // build and compile our shader program
         let shaderProgram = Shader::new(
             "src/shaders/shader.vs",
@@ -43,22 +53,16 @@ fn main() {
         // set up vertex data (and buffer(s)) and configure vertex attributes
         // ------------------------------------------------------------------
         // HINT: type annotation is crucial since default for float literals is f64
-        let vertices: [f32; 24] = [
-             -0.5,  0.5, 0.0,  // first top left
-             0.5, 0.5, 0.0,  // first top right
-             -0.5, 0.2, 0.0,  // first bottom left
-             0.5,  0.2, 0.0,   // first bottom right
-            
-             -0.5,  -0.2, 0.0,  // second top left
-             0.5, -0.2, 0.0,  // second top right
-             -0.5, -0.5, 0.0,  // second bottom left
-             0.5,  -0.5, 0.0   // second bottom right
+        let vertices: [f32; 20] = [
+            // positions       // texture coords
+             0.5,  0.5, 0.0,   1.0, 1.0, // top right
+             0.5, -0.5, 0.0,   1.0, 0.0, // bottom right
+            -0.5, -0.5, 0.0,   0.0, 0.0, // bottom left
+            -0.5,  0.5, 0.0,   0.0, 1.0  // top left
         ];
         let indices = [ // note that we start from 0!
-            0, 1, 3, // first Triangle
-            0, 2, 3,   // second Triangle
-            4, 5, 7, // third Triangle
-            4, 6, 7,   // fourth Triangle
+            0, 1, 3,  // first Triangle
+            1, 2, 3   // second Triangle
         ];
         let (mut VBO, mut VAO, mut EBO) = (0, 0, 0);
         gl::GenVertexArrays(1, &mut VAO);
@@ -78,21 +82,81 @@ fn main() {
                        (indices.len() * mem::size_of::<GLfloat>()) as GLsizeiptr,
                        &indices[0] as *const i32 as *const c_void,
                        gl::STATIC_DRAW);
+        
+        let stride = 5 * mem::size_of::<GLfloat>() as GLsizei;
 
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 3 * mem::size_of::<GLfloat>() as GLsizei, ptr::null());
+        // position attribute
+        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, stride, ptr::null());
         gl::EnableVertexAttribArray(0);
 
+        // texture coord attribute
+        gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, stride, (3 * mem::size_of::<GLfloat>()) as *const c_void);
+        gl::EnableVertexAttribArray(1);
+
+        let (mut texture1, mut texture2) = (0, 0);
+        // texture 1
+        gl::GenTextures(1, &mut texture1);
+        gl::BindTexture(gl::TEXTURE_2D, texture1);
+        // set the texture wrapping parameters
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
+        // set texture filtering parameters
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+        // load image, generate texture and generate mipmaps
+        let img = image::open(&Path::new("resources/textures/container.jpg")).expect("Failed to load texture");
+        let data = img.raw_pixels();
+        gl::TexImage2D(gl::TEXTURE_2D,
+                       0,
+                       gl::RGB as i32,
+                       img.width() as i32,
+                       img.height() as i32,
+                       0,
+                       gl::RGB,
+                       gl::UNSIGNED_BYTE,
+                       &data[0] as *const u8 as *const c_void);
+        gl::GenerateMipmap(gl::TEXTURE_2D);
+
+        // texture 2
+        gl::GenTextures(1, &mut texture2);
+        gl::BindTexture(gl::TEXTURE_2D, texture2);
+        // set the texture wrapping parameters
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as i32);
+        // set texture filtering parameters
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+        // load image, generate texture and generate mipmaps
+        let img = image::open(&Path::new("resources/textures/awesomepage.png")).expect("Failed to load texture");
+        let img = img.flipv(); // flip loaded texture on the y-axis
+        let data = img.raw_pixels();
+        // note that the awesomeface.png has transparency and thus an alpha channel, so make sure
+        // to tell OpenGL the data type of GL_RGBA
+        gl::TexImage2D(gl::TEXTURE_2D,
+                       0,
+                       gl::RGB as i32,
+                       img.width() as i32,
+                       img.height() as i32,
+                       0,
+                       gl::RGBA,
+                       gl::UNSIGNED_BYTE,
+                       &data[0] as *const u8 as *const c_void);
+        gl::GenerateMipmap(gl::TEXTURE_2D);
+
         // note that this is allowed, the call to gl::VertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
-        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        //gl::BindBuffer(gl::ARRAY_BUFFER, 0);
 
         // You can unbind the VAO afterwards so other VAO calls won't accidentally modify this VAO, but this rarely happens. Modifying other
         // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
-        gl::BindVertexArray(0);
+        //gl::BindVertexArray(0);
 
         // uncomment this call to draw in wireframe polygons.
         //gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
+        shaderProgram.useProgram();
+        shaderProgram.setInt(c_str!("texture1"), 0);
+        shaderProgram.setInt(c_str!("texture2"), 1);
 
-        (shaderProgram, VAO)
+        (shaderProgram, VBO, VAO, EBO, texture1, texture2)
     };
 
     // render loop
@@ -103,11 +167,26 @@ fn main() {
             gl::ClearColor(0.2, 0.3, 0.3, 0.1);
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
-            // draw our first triangle
+            // bind textures on corresponding texture units
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, texture1);
+            gl::ActiveTexture(gl::TEXTURE1);
+            gl::BindTexture(gl::TEXTURE_2D, texture2);
+
+            // create transformations
+            let mut transform: Matrix4<f32> = Matrix4::identity();
+            transform = transform * Matrix4::<f32>::from_translation(vec3(0.5, -0.5, 0.0));
+            transform = transform * Matrix4::<f32>::from_angle_z(Rad(glfw.get_time() as f32));
+
+            // get matrix's uniform location and set matrix
             shaderProgram.useProgram();
-            gl::BindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
+            let transformLoc = gl::GetUniformLocation(shaderProgram.ID, c_str!("transform").as_ptr());
+            gl::UniformMatrix4fv(transformLoc, 1, gl::FALSE, transform.as_ptr());
+
+            // render container
+            gl::BindVertexArray(VAO);
             //gl::DrawArrays(gl::TRIANGLES, 0, 3);
-            gl::DrawElements(gl::TRIANGLES, 12, gl::UNSIGNED_INT, ptr::null());
+            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
         }
 
         window.swap_buffers();
