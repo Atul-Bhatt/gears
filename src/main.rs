@@ -43,9 +43,9 @@ fn main() {
     // load function pointers
     gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
 
-    let (shaderProgram, VBO, VAO, EB0, texture1, texture2) = unsafe {
+    let (ourShader, VBO, VAO, EBO, texture1, texture2) = unsafe {
         // build and compile our shader program
-        let shaderProgram = Shader::new(
+        let ourShader = Shader::new(
             "src/shaders/shader.vs",
             "src/shaders/shader.fs"
         );
@@ -60,7 +60,7 @@ fn main() {
             -0.5, -0.5, 0.0,   0.0, 0.0, // bottom left
             -0.5,  0.5, 0.0,   0.0, 1.0  // top left
         ];
-        let indices = [ // note that we start from 0!
+        let indices = [ 
             0, 1, 3,  // first Triangle
             1, 2, 3   // second Triangle
         ];
@@ -68,7 +68,7 @@ fn main() {
         gl::GenVertexArrays(1, &mut VAO);
         gl::GenBuffers(1, &mut VBO);
         gl::GenBuffers(1, &mut EBO);
-        // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+
         gl::BindVertexArray(VAO);
 
         gl::BindBuffer(gl::ARRAY_BUFFER, VBO);
@@ -93,6 +93,7 @@ fn main() {
         gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, stride, (3 * mem::size_of::<GLfloat>()) as *const c_void);
         gl::EnableVertexAttribArray(1);
 
+        // load and create a texture
         let (mut texture1, mut texture2) = (0, 0);
         // texture 1
         gl::GenTextures(1, &mut texture1);
@@ -127,7 +128,7 @@ fn main() {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
         // load image, generate texture and generate mipmaps
-        let img = image::open(&Path::new("resources/textures/awesomepage.png")).expect("Failed to load texture");
+        let img = image::open(&Path::new("resources/textures/awesomeface.png")).expect("Failed to load texture");
         let img = img.flipv(); // flip loaded texture on the y-axis
         let data = img.raw_pixels();
         // note that the awesomeface.png has transparency and thus an alpha channel, so make sure
@@ -143,20 +144,11 @@ fn main() {
                        &data[0] as *const u8 as *const c_void);
         gl::GenerateMipmap(gl::TEXTURE_2D);
 
-        // note that this is allowed, the call to gl::VertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
-        //gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        ourShader.useProgram();
+        ourShader.setInt(c_str!("texture1"), 0);
+        ourShader.setInt(c_str!("texture2"), 1);
 
-        // You can unbind the VAO afterwards so other VAO calls won't accidentally modify this VAO, but this rarely happens. Modifying other
-        // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
-        //gl::BindVertexArray(0);
-
-        // uncomment this call to draw in wireframe polygons.
-        //gl::PolygonMode(gl::FRONT_AND_BACK, gl::LINE);
-        shaderProgram.useProgram();
-        shaderProgram.setInt(c_str!("texture1"), 0);
-        shaderProgram.setInt(c_str!("texture2"), 1);
-
-        (shaderProgram, VBO, VAO, EBO, texture1, texture2)
+        (ourShader, VBO, VAO, EBO, texture1, texture2)
     };
 
     // render loop
@@ -179,8 +171,8 @@ fn main() {
             transform = transform * Matrix4::<f32>::from_angle_z(Rad(glfw.get_time() as f32));
 
             // get matrix's uniform location and set matrix
-            shaderProgram.useProgram();
-            let transformLoc = gl::GetUniformLocation(shaderProgram.ID, c_str!("transform").as_ptr());
+            ourShader.useProgram();
+            let transformLoc = gl::GetUniformLocation(ourShader.ID, c_str!("transform").as_ptr());
             gl::UniformMatrix4fv(transformLoc, 1, gl::FALSE, transform.as_ptr());
 
             // render container
@@ -191,6 +183,12 @@ fn main() {
 
         window.swap_buffers();
         glfw.poll_events();
+    }
+
+    unsafe {
+        gl::DeleteVertexArrays(1, &VAO);
+        gl::DeleteBuffers(1, &VBO);
+        gl::DeleteBuffers(1, &EBO);
     }
 }
 
